@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2048 — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; overflow:hidden; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:14px; padding:14px; }
+  .hud{ display:flex; gap:20px; align-items:center; font-family:'Press Start 2P',monospace; font-size:12px; }
+  .hud .score{ color:var(--lime); } .hud .best{ color:var(--pink); }
+  #board{
+    display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(4,1fr);
+    gap:10px; width:min(90vw,360px); height:min(90vw,360px);
+    background:var(--surface); border:2px solid var(--border); border-radius:14px; padding:10px;
+    box-shadow:0 20px 50px rgba(124,58,237,.2);
+  }
+  .cell{ background:rgba(255,255,255,.03); border-radius:8px; display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:clamp(16px,4.5vw,26px); transition: background .12s, transform .12s; }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:320px; }
+  .overlay{ position:absolute; inset:0; background:rgba(6,4,16,.88); display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; }
+  .overlay.show{ display:flex; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="hud"><span class="score">SCORE: <span id="score">0</span></span><span class="best">BEST: <span id="best">0</span></span></div>
+  <div id="board"></div>
+  <p class="hint">Strelka tugmalari yoki barmoq bilan suring (swipe). Bir xil raqamlarni birlashtirib 2048 ga yeting!</p>
+  <div class="overlay" id="overOverlay">
+    <h2 id="overTitle">O'yin tugadi</h2>
+    <p class="hint" id="finalScore"></p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const boardEl = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+let grid, score, best = +localStorage.getItem('neonplay_2048_best') || 0, won = false;
+bestEl.textContent = best;
+
+const colors = {
+  2:'#2B2450', 4:'#3A3168', 8:'#7C3AED', 16:'#9F5CF0', 32:'#B57EF5',
+  64:'#FF3D81', 128:'#FF6BA0', 256:'#C4F135', 512:'#A7D62A', 1024:'#FFD166', 2048:'#FFE066'
+};
+
+function initGrid(){
+  grid = Array.from({length:4}, () => Array(4).fill(0));
+  score = 0; won = false;
+  addTile(); addTile();
+  updateUI();
+}
+
+function addTile(){
+  const empty = [];
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++) if(grid[r][c]===0) empty.push([r,c]);
+  if(empty.length===0) return;
+  const [r,c] = empty[Math.floor(Math.random()*empty.length)];
+  grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+}
+
+function updateUI(){
+  boardEl.innerHTML = '';
+  for(let r=0;r<4;r++){
+    for(let c=0;c<4;c++){
+      const v = grid[r][c];
+      const div = document.createElement('div');
+      div.className = 'cell';
+      if(v){
+        div.textContent = v;
+        div.style.background = colors[v] || '#FFD166';
+        div.style.color = v <= 4 ? '#F5F3FF' : '#0E0B1E';
+      }
+      boardEl.appendChild(div);
+    }
+  }
+  scoreEl.textContent = score;
+  if(score > best){ best = score; localStorage.setItem('neonplay_2048_best', best); bestEl.textContent = best; }
+}
+
+function slideRowLeft(row){
+  let arr = row.filter(v=>v!==0);
+  for(let i=0;i<arr.length-1;i++){
+    if(arr[i] === arr[i+1]){
+      arr[i] *= 2; score += arr[i];
+      if(arr[i] === 2048) won = true;
+      arr.splice(i+1,1);
+    }
+  }
+  while(arr.length < 4) arr.push(0);
+  return arr;
+}
+
+function rotateGrid(g){
+  const n = g.map(r=>[...r]);
+  const res = Array.from({length:4}, () => Array(4).fill(0));
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++) res[c][3-r] = n[r][c];
+  return res;
+}
+
+function move(dir){
+  let moved = false;
+  let g = grid.map(r=>[...r]);
+
+  let rotations = { left:0, up:1, right:2, down:3 }[dir];
+  for(let i=0;i<rotations;i++) g = rotateGrid(g);
+
+  const newG = g.map(row => slideRowLeft(row));
+  if(JSON.stringify(newG) !== JSON.stringify(g)) moved = true;
+
+  let result = newG;
+  for(let i=0;i<(4-rotations)%4;i++) result = rotateGrid(result);
+
+  if(moved){
+    grid = result;
+    addTile();
+    updateUI();
+    if(won){
+      document.getElementById('overTitle').textContent = "🎉 G'alaba!";
+      document.getElementById('finalScore').textContent = '2048 ga yetdingiz! Ball: ' + score;
+      document.getElementById('overOverlay').classList.add('show');
+    } else if(isGameOver()){
+      document.getElementById('overTitle').textContent = "O'yin tugadi";
+      document.getElementById('finalScore').textContent = 'Ball: ' + score;
+      document.getElementById('overOverlay').classList.add('show');
+    }
+  }
+}
+
+function isGameOver(){
+  for(let r=0;r<4;r++) for(let c=0;c<4;c++){
+    if(grid[r][c]===0) return false;
+    if(c<3 && grid[r][c]===grid[r][c+1]) return false;
+    if(r<3 && grid[r][c]===grid[r+1][c]) return false;
+  }
+  return true;
+}
+
+window.addEventListener('keydown', e=>{
+  const map = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down' };
+  if(map[e.key]){ e.preventDefault(); move(map[e.key]); }
+});
+
+let sx=0, sy=0;
+document.addEventListener('touchstart', e=>{ sx=e.touches[0].clientX; sy=e.touches[0].clientY; });
+document.addEventListener('touchend', e=>{
+  const dx = e.changedTouches[0].clientX - sx;
+  const dy = e.changedTouches[0].clientY - sy;
+  if(Math.max(Math.abs(dx),Math.abs(dy)) < 20) return;
+  if(Math.abs(dx) > Math.abs(dy)) move(dx>0?'right':'left');
+  else move(dy>0?'down':'up');
+});
+
+document.getElementById('restartBtn').addEventListener('click', ()=>{
+  document.getElementById('overOverlay').classList.remove('show');
+  initGrid();
+});
+
+initGrid();
+</script>
+</body>
+</html>

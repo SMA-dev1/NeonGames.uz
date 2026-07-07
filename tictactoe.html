@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>X-O O'yini — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ min-height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:16px; padding:16px; }
+  .mode-row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .mode-btn{ background:var(--surface); border:1px solid var(--border); color:var(--muted); padding:9px 16px; border-radius:999px; font-size:13px; font-weight:600; cursor:pointer; }
+  .mode-btn.active{ background:var(--violet); color:#fff; border-color:var(--violet); }
+  .status{ font-family:'Press Start 2P',monospace; font-size:13px; color:var(--lime); min-height:20px; text-align:center; }
+  #board{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:min(88vw,320px); }
+  .cell{ aspect-ratio:1; background:var(--surface); border:1px solid var(--border); border-radius:14px;
+    display:flex; align-items:center; justify-content:center; font-size:clamp(28px,9vw,46px); font-weight:700; cursor:pointer; transition:border-color .15s, transform .1s; }
+  .cell:hover{ border-color:var(--violet-soft, #A78BFA); }
+  .cell.x{ color:var(--pink); } .cell.o{ color:var(--lime); }
+  .cell.win{ background:rgba(196,241,53,.12); border-color:var(--lime); }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+  .score-row{ display:flex; gap:24px; font-size:12px; color:var(--muted); }
+  .score-row b{ color:var(--text); }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="mode-row">
+    <button class="mode-btn active" data-mode="ai">🤖 Kompyuterga qarshi</button>
+    <button class="mode-btn" data-mode="2p">👥 Ikki kishi</button>
+  </div>
+  <div class="status" id="status">Sizning navbatingiz (X)</div>
+  <div id="board"></div>
+  <div class="score-row">
+    <span>X: <b id="scoreX">0</b></span>
+    <span>O: <b id="scoreO">0</b></span>
+    <span>Durrang: <b id="scoreD">0</b></span>
+  </div>
+  <button class="btn" id="restartBtn">Yangi o'yin</button>
+</div>
+
+<script>
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+let board, current, gameOver, mode = 'ai';
+let scores = { X:0, O:0, D:0 };
+
+const wins = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+function render(){
+  boardEl.innerHTML = '';
+  board.forEach((v, i) => {
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (v ? ' ' + v.toLowerCase() : '');
+    cell.textContent = v || '';
+    cell.addEventListener('click', () => handleMove(i));
+    boardEl.appendChild(cell);
+  });
+}
+
+function checkWinner(b){
+  for(const [a,c,d] of wins){
+    if(b[a] && b[a]===b[c] && b[a]===b[d]) return { winner: b[a], line:[a,c,d] };
+  }
+  if(b.every(v=>v)) return { winner:'draw' };
+  return null;
+}
+
+function handleMove(i){
+  if(gameOver || board[i]) return;
+  board[i] = current;
+  render();
+  const result = checkWinner(board);
+  if(result){ return finish(result); }
+  current = current === 'X' ? 'O' : 'X';
+  updateStatus();
+
+  if(mode === 'ai' && current === 'O' && !gameOver){
+    setTimeout(aiMove, 400);
+  }
+}
+
+function updateStatus(){
+  if(mode==='ai'){
+    statusEl.textContent = current === 'X' ? 'Sizning navbatingiz (X)' : 'Kompyuter o\'ylamoqda...';
+  } else {
+    statusEl.textContent = `Navbat: ${current}`;
+  }
+}
+
+function finish(result){
+  gameOver = true;
+  highlightWin(result);
+  if(result.winner === 'draw'){
+    statusEl.textContent = "Durrang! 🤝";
+    scores.D++;
+    document.getElementById('scoreD').textContent = scores.D;
+  } else {
+    statusEl.textContent = mode==='ai'
+      ? (result.winner==='X' ? "🎉 Siz yutdingiz!" : "🤖 Kompyuter yutdi!")
+      : `🎉 ${result.winner} g'olib!`;
+    scores[result.winner]++;
+    document.getElementById('score'+result.winner).textContent = scores[result.winner];
+  }
+}
+
+function highlightWin(result){
+  if(!result.line) return;
+  const cells = boardEl.children;
+  result.line.forEach(i => cells[i].classList.add('win'));
+}
+
+function aiMove(){
+  const best = minimax(board, 'O').index;
+  if(best === undefined) return;
+  board[best] = 'O';
+  render();
+  const result = checkWinner(board);
+  if(result){ return finish(result); }
+  current = 'X';
+  updateStatus();
+}
+
+function minimax(b, player){
+  const avail = b.map((v,i)=>v?null:i).filter(v=>v!==null);
+  const result = checkWinner(b);
+  if(result){
+    if(result.winner === 'O') return { score: 10 };
+    if(result.winner === 'X') return { score: -10 };
+    return { score: 0 };
+  }
+
+  const moves = [];
+  for(const idx of avail){
+    const newB = [...b];
+    newB[idx] = player;
+    const res = minimax(newB, player === 'O' ? 'X' : 'O');
+    moves.push({ index: idx, score: res.score });
+  }
+
+  if(player === 'O'){
+    return moves.reduce((best, m) => m.score > best.score ? m : best, { score:-Infinity });
+  } else {
+    return moves.reduce((best, m) => m.score < best.score ? m : best, { score:Infinity });
+  }
+}
+
+function newGame(){
+  board = Array(9).fill(null);
+  current = 'X';
+  gameOver = false;
+  render();
+  updateStatus();
+}
+
+document.getElementById('restartBtn').addEventListener('click', newGame);
+document.querySelectorAll('.mode-btn').forEach(btn=>{
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    newGame();
+  });
+});
+
+newGame();
+</script>
+</body>
+</html>

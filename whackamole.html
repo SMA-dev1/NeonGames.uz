@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Krotni Ur — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ min-height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:16px; padding:16px; }
+  .hud{ font-family:'Press Start 2P',monospace; font-size:12px; display:flex; gap:24px; }
+  .hud .score{ color:var(--lime); } .hud .time{ color:var(--pink); }
+  #board{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; width:min(90vw,340px); }
+  .hole{ aspect-ratio:1; background:radial-gradient(ellipse at center, #241a3f 0%, #17132B 70%); border:1px solid var(--border); border-radius:50%;
+    display:flex; align-items:flex-end; justify-content:center; overflow:hidden; cursor:pointer; position:relative; }
+  .mole{ width:70%; transform:translateY(100%); transition:transform .15s ease-out; }
+  .hole.up .mole{ transform:translateY(10%); }
+  .hole.hit .mole{ filter:brightness(1.6); }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:320px; }
+  .overlay{ position:fixed; inset:0; background:rgba(6,4,16,.9); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; }
+  .overlay.hide{ display:none; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="hud"><span class="score">SCORE: <span id="score">0</span></span><span class="time">VAQT: <span id="time">30</span>s</span></div>
+  <div id="board"></div>
+  <p class="hint">Chiqib qolgan krotlarni tezda bosing. 30 soniyada eng ko'p ball to'plang!</p>
+  <div class="overlay" id="startOverlay">
+    <h2>🔨 Krotni Ur</h2>
+    <button class="btn" id="startBtn">Boshlash</button>
+  </div>
+  <div class="overlay hide" id="overOverlay">
+    <h2>Vaqt tugadi!</h2>
+    <p class="hint" id="finalScore"></p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const boardEl = document.getElementById('board');
+const scoreEl = document.getElementById('score');
+const timeEl = document.getElementById('time');
+const holeCount = 9;
+let holes = [], score = 0, timeLeft = 30, gameTimer, moleTimer, activeHole = null, running = false;
+
+function buildBoard(){
+  boardEl.innerHTML = '';
+  holes = [];
+  for(let i=0;i<holeCount;i++){
+    const hole = document.createElement('div');
+    hole.className = 'hole';
+    hole.innerHTML = `<svg class="mole" viewBox="0 0 100 100"><ellipse cx="50" cy="55" rx="32" ry="38" fill="#A16207"/><circle cx="38" cy="45" r="5" fill="#0E0B1E"/><circle cx="62" cy="45" r="5" fill="#0E0B1E"/><ellipse cx="50" cy="62" rx="10" ry="7" fill="#0E0B1E"/></svg>`;
+    hole.addEventListener('click', () => whack(i));
+    boardEl.appendChild(hole);
+    holes.push(hole);
+  }
+}
+
+function popRandomMole(){
+  holes.forEach(h => h.classList.remove('up','hit'));
+  activeHole = Math.floor(Math.random()*holeCount);
+  holes[activeHole].classList.add('up');
+}
+
+function whack(i){
+  if(!running) return;
+  if(i === activeHole && holes[i].classList.contains('up')){
+    holes[i].classList.add('hit');
+    score += 10;
+    scoreEl.textContent = score;
+    activeHole = null;
+    setTimeout(()=> holes[i].classList.remove('up','hit'), 120);
+  }
+}
+
+function startGame(){
+  score = 0; timeLeft = 30; running = true;
+  scoreEl.textContent = 0; timeEl.textContent = 30;
+  document.getElementById('startOverlay').classList.add('hide');
+  document.getElementById('overOverlay').classList.add('hide');
+  buildBoard();
+
+  moleTimer = setInterval(popRandomMole, 850);
+  gameTimer = setInterval(() => {
+    timeLeft--;
+    timeEl.textContent = timeLeft;
+    if(timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function endGame(){
+  running = false;
+  clearInterval(moleTimer);
+  clearInterval(gameTimer);
+  holes.forEach(h => h.classList.remove('up','hit'));
+  document.getElementById('finalScore').textContent = 'Yakuniy ball: ' + score;
+  document.getElementById('overOverlay').classList.remove('hide');
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+buildBoard();
+</script>
+</body>
+</html>

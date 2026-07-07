@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>G'ishtlar Jangi — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; overflow:hidden; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; padding:12px; }
+  .hud{ font-family:'Press Start 2P',monospace; font-size:12px; color:var(--lime); display:flex; gap:18px; }
+  .hud .lives{ color:var(--pink); }
+  canvas{ background:#0a0817; border:2px solid var(--border); border-radius:14px; box-shadow:0 20px 50px rgba(124,58,237,.25); max-width:94vw; max-height:60vh; touch-action:none; }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:320px; }
+  .overlay{ position:absolute; inset:0; background:rgba(6,4,16,.85); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; }
+  .overlay.hide{ display:none; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="hud"><span>SCORE: <span id="score">0</span></span><span class="lives">JON: <span id="lives">3</span></span></div>
+  <canvas id="c" width="340" height="440"></canvas>
+  <p class="hint">Sichqoncha yoki barmoq bilan platformani suring. Klaviaturada ◀ ▶ ham ishlaydi.</p>
+  <div class="overlay" id="startOverlay">
+    <h2>🧱 G'ishtlar Jangi</h2>
+    <button class="btn" id="startBtn">Boshlash</button>
+  </div>
+  <div class="overlay hide" id="overOverlay">
+    <h2 id="overTitle">O'yin tugadi</h2>
+    <p class="hint" id="finalScore"></p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const paddle = { w:80, h:12, x:(W-80)/2, y:H-30, speed:7 };
+let ball, bricks, score, lives, running = false, raf;
+const rows = 5, cols = 7, brickW = (W - 20) / cols, brickH = 18, brickPad = 4, brickTop = 40;
+const brickColors = ['#FF3D81','#7C3AED','#A78BFA','#C4F135','#22C55E'];
+
+function resetBall(){
+  ball = { x: W/2, y: H-50, vx: 3.2 * (Math.random()>0.5?1:-1), vy: -3.6, r:7 };
+}
+
+function initBricks(){
+  bricks = [];
+  for(let r=0;r<rows;r++){
+    for(let c=0;c<cols;c++){
+      bricks.push({ x: 10 + c*brickW, y: brickTop + r*(brickH+brickPad), w:brickW-brickPad, h:brickH, alive:true, color: brickColors[r % brickColors.length] });
+    }
+  }
+}
+
+function init(){
+  score = 0; lives = 3;
+  document.getElementById('score').textContent = 0;
+  document.getElementById('lives').textContent = 3;
+  paddle.x = (W-paddle.w)/2;
+  initBricks();
+  resetBall();
+}
+
+function update(){
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  if(ball.x - ball.r < 0 || ball.x + ball.r > W) ball.vx *= -1;
+  if(ball.y - ball.r < 0) ball.vy *= -1;
+
+  if(ball.y + ball.r > paddle.y && ball.y + ball.r < paddle.y + paddle.h &&
+     ball.x > paddle.x && ball.x < paddle.x + paddle.w && ball.vy > 0){
+    const hitPos = (ball.x - paddle.x) / paddle.w - 0.5;
+    ball.vx = hitPos * 7;
+    ball.vy = -Math.abs(ball.vy);
+  }
+
+  if(ball.y - ball.r > H){
+    lives--;
+    document.getElementById('lives').textContent = lives;
+    if(lives <= 0){ return endGame(false); }
+    resetBall();
+  }
+
+  bricks.forEach(b => {
+    if(!b.alive) return;
+    if(ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+       ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h){
+      b.alive = false;
+      ball.vy *= -1;
+      score += 10;
+      document.getElementById('score').textContent = score;
+    }
+  });
+
+  if(bricks.every(b => !b.alive)) endGame(true);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = '#0a0817';
+  ctx.fillRect(0,0,W,H);
+
+  bricks.forEach(b => {
+    if(!b.alive) return;
+    ctx.fillStyle = b.color;
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(b.x,b.y,b.w,b.h,4) : ctx.rect(b.x,b.y,b.w,b.h);
+    ctx.fill();
+  });
+
+  ctx.fillStyle = '#A78BFA';
+  ctx.beginPath();
+  ctx.roundRect ? ctx.roundRect(paddle.x, paddle.y, paddle.w, paddle.h, 6) : ctx.rect(paddle.x,paddle.y,paddle.w,paddle.h);
+  ctx.fill();
+
+  ctx.fillStyle = '#F5F3FF';
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  ctx.fill();
+}
+
+function loop(){
+  if(!running) return;
+  update();
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+function endGame(won){
+  running = false;
+  cancelAnimationFrame(raf);
+  document.getElementById('overTitle').textContent = won ? "🎉 G'alaba!" : "O'yin tugadi";
+  document.getElementById('finalScore').textContent = 'Ball: ' + score;
+  document.getElementById('overOverlay').classList.remove('hide');
+}
+
+function startGame(){
+  init();
+  draw();
+  running = true;
+  document.getElementById('startOverlay').classList.add('hide');
+  document.getElementById('overOverlay').classList.add('hide');
+  loop();
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+function movePaddleTo(clientX){
+  const rect = canvas.getBoundingClientRect();
+  const scale = W / rect.width;
+  const x = (clientX - rect.left) * scale;
+  paddle.x = Math.max(0, Math.min(W - paddle.w, x - paddle.w/2));
+}
+
+canvas.addEventListener('mousemove', e => movePaddleTo(e.clientX));
+canvas.addEventListener('touchmove', e => { e.preventDefault(); movePaddleTo(e.touches[0].clientX); }, {passive:false});
+
+let keyLeft=false, keyRight=false;
+window.addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft') keyLeft=true;
+  if(e.key==='ArrowRight') keyRight=true;
+});
+window.addEventListener('keyup', e=>{
+  if(e.key==='ArrowLeft') keyLeft=false;
+  if(e.key==='ArrowRight') keyRight=false;
+});
+setInterval(()=>{
+  if(keyLeft) paddle.x = Math.max(0, paddle.x - paddle.speed);
+  if(keyRight) paddle.x = Math.min(W-paddle.w, paddle.x + paddle.speed);
+}, 16);
+
+init();
+draw();
+</script>
+</body>
+</html>

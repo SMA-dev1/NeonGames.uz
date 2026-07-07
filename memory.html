@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Xotira Kartalari — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ min-height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:14px; padding:16px; }
+  .hud{ display:flex; gap:20px; align-items:center; font-family:'Press Start 2P',monospace; font-size:11px; flex-wrap:wrap; justify-content:center; }
+  .hud .moves{ color:var(--lime); } .hud .time{ color:var(--pink); }
+  #board{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; width:min(92vw,400px); }
+  .card{ aspect-ratio:1; border-radius:12px; position:relative; cursor:pointer; perspective:600px; }
+  .card-inner{ position:relative; width:100%; height:100%; transition:transform .4s; transform-style:preserve-3d; }
+  .card.flipped .card-inner, .card.matched .card-inner{ transform: rotateY(180deg); }
+  .face{ position:absolute; inset:0; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:clamp(20px,6vw,32px); backface-visibility:hidden; }
+  .face.back{ background:var(--surface); border:1px solid var(--border); }
+  .face.back::after{ content:"?"; color:var(--muted); font-family:'Press Start 2P',monospace; font-size:16px; }
+  .face.front{ background:linear-gradient(160deg,#3B2A6B,#17132B); border:1px solid var(--violet); transform:rotateY(180deg); }
+  .card.matched .face.front{ background:linear-gradient(160deg,#1c3d2e,#17132B); border-color:var(--lime); }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:340px; }
+  .overlay{ position:fixed; inset:0; background:rgba(6,4,16,.9); display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; }
+  .overlay.show{ display:flex; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="hud"><span class="moves">YURISH: <span id="moves">0</span></span><span class="time">VAQT: <span id="time">0</span>s</span></div>
+  <div id="board"></div>
+  <p class="hint">Kartalarni bosib, bir xil juftliklarni toping. Eng kam yurish va vaqt bilan yakunlang!</p>
+  <div class="overlay" id="winOverlay">
+    <h2>🎉 Ajoyib!</h2>
+    <p class="hint" id="winStats"></p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const emojis = ['🎮','🚀','🍕','⭐','🎧','🐙','🔥','💎'];
+const boardEl = document.getElementById('board');
+const movesEl = document.getElementById('moves');
+const timeEl = document.getElementById('time');
+
+let cards = [], flipped = [], matchedCount = 0, moves = 0, timer = null, seconds = 0, lock = false;
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function init(){
+  clearInterval(timer);
+  seconds = 0; moves = 0; matchedCount = 0; flipped = []; lock = false;
+  movesEl.textContent = 0; timeEl.textContent = 0;
+  document.getElementById('winOverlay').classList.remove('show');
+
+  cards = shuffle([...emojis, ...emojis]);
+  boardEl.innerHTML = '';
+  cards.forEach((emoji, idx) => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.dataset.idx = idx;
+    card.dataset.val = emoji;
+    card.innerHTML = `
+      <div class="card-inner">
+        <div class="face back"></div>
+        <div class="face front">${emoji}</div>
+      </div>`;
+    card.addEventListener('click', () => flipCard(card));
+    boardEl.appendChild(card);
+  });
+
+  timer = setInterval(() => { seconds++; timeEl.textContent = seconds; }, 1000);
+}
+
+function flipCard(card){
+  if(lock || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+  card.classList.add('flipped');
+  flipped.push(card);
+
+  if(flipped.length === 2){
+    moves++; movesEl.textContent = moves;
+    lock = true;
+    const [a,b] = flipped;
+    if(a.dataset.val === b.dataset.val){
+      a.classList.add('matched'); b.classList.add('matched');
+      matchedCount += 2;
+      flipped = []; lock = false;
+      if(matchedCount === cards.length) endGame();
+    } else {
+      setTimeout(() => {
+        a.classList.remove('flipped'); b.classList.remove('flipped');
+        flipped = []; lock = false;
+      }, 700);
+    }
+  }
+}
+
+function endGame(){
+  clearInterval(timer);
+  document.getElementById('winStats').textContent = `${moves} yurish, ${seconds} soniyada yakunladingiz!`;
+  document.getElementById('winOverlay').classList.add('show');
+}
+
+document.getElementById('restartBtn').addEventListener('click', init);
+init();
+</script>
+</body>
+</html>

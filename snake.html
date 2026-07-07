@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Neon Ilon — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; overflow:hidden; }
+  .game-wrap{ display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:14px; padding:14px; }
+  .hud{ display:flex; gap:20px; align-items:center; font-family:'Press Start 2P',monospace; font-size:12px; }
+  .hud .score{ color:var(--lime); }
+  .hud .best{ color:var(--pink); }
+  canvas{ background:#0a0817; border:2px solid var(--border); border-radius:14px; box-shadow:0 20px 50px rgba(124,58,237,.25); max-width:94vw; max-height:60vh; touch-action:none; }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:340px; }
+  .overlay{ position:absolute; inset:0; background:rgba(6,4,16,.88); display:none; align-items:center; justify-content:center; flex-direction:column; gap:16px; text-align:center; }
+  .overlay.show{ display:flex; }
+  .overlay h2{ font-size:26px; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-family:'Space Grotesk',sans-serif; font-size:14px; cursor:pointer; }
+  .touch-controls{ display:none; grid-template-columns:repeat(3,54px); grid-template-rows:repeat(3,54px); gap:6px; }
+  .touch-controls button{ background:var(--surface); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:20px; }
+  .tc-up{ grid-column:2; grid-row:1; } .tc-left{ grid-column:1; grid-row:2; } .tc-down{ grid-column:2; grid-row:3; } .tc-right{ grid-column:3; grid-row:2; }
+  @media (pointer:coarse){ .touch-controls{ display:grid; } }
+</style>
+</head>
+<body>
+<div class="game-wrap" style="position:relative;">
+  <div class="hud"><span class="score">SCORE: <span id="score">0</span></span><span class="best">BEST: <span id="best">0</span></span></div>
+  <canvas id="board" width="360" height="360"></canvas>
+  <p class="hint">Strelka tugmalari yoki WASD bilan boshqaring. Devorga yoki o'ziga urilmang!</p>
+  <div class="touch-controls">
+    <button class="tc-up" data-dir="up">▲</button>
+    <button class="tc-left" data-dir="left">◀</button>
+    <button class="tc-down" data-dir="down">▼</button>
+    <button class="tc-right" data-dir="right">▶</button>
+  </div>
+  <div class="overlay show" id="startOverlay">
+    <h2>🐍 Neon Ilon</h2>
+    <p class="hint">Olma yeb, uzayib boring. Tayyor bo'lsangiz boshlang!</p>
+    <button class="btn" id="startBtn">Boshlash</button>
+  </div>
+  <div class="overlay" id="overOverlay">
+    <h2>O'yin tugadi</h2>
+    <p class="hint" id="finalScore">Ball: 0</p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+const cell = 18;
+const cols = canvas.width / cell;
+const rows = canvas.height / cell;
+
+let snake, dir, nextDir, food, score, best = +localStorage.getItem('neonplay_snake_best') || 0, loopId, running = false;
+document.getElementById('best').textContent = best;
+
+function resetGame(){
+  snake = [{x:8,y:9},{x:7,y:9},{x:6,y:9}];
+  dir = {x:1,y:0}; nextDir = {x:1,y:0};
+  score = 0;
+  document.getElementById('score').textContent = score;
+  placeFood();
+}
+
+function placeFood(){
+  do{
+    food = { x: Math.floor(Math.random()*cols), y: Math.floor(Math.random()*rows) };
+  } while(snake.some(s => s.x===food.x && s.y===food.y));
+}
+
+function draw(){
+  ctx.fillStyle = '#0a0817';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // grid dots
+  ctx.fillStyle = 'rgba(167,157,199,0.06)';
+  for(let x=0;x<cols;x++) for(let y=0;y<rows;y++) ctx.fillRect(x*cell+cell/2-1, y*cell+cell/2-1, 2,2);
+
+  // food
+  ctx.fillStyle = '#FF3D81';
+  ctx.beginPath();
+  ctx.arc(food.x*cell+cell/2, food.y*cell+cell/2, cell/2-2, 0, Math.PI*2);
+  ctx.fill();
+
+  // snake
+  snake.forEach((s,i)=>{
+    ctx.fillStyle = i===0 ? '#C4F135' : `rgba(124,58,237,${1 - i*0.03})`;
+    ctx.fillRect(s.x*cell+1, s.y*cell+1, cell-2, cell-2);
+  });
+}
+
+function tick(){
+  dir = nextDir;
+  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  if(head.x<0||head.x>=cols||head.y<0||head.y>=rows||snake.some(s=>s.x===head.x&&s.y===head.y)){
+    endGame();
+    return;
+  }
+  snake.unshift(head);
+  if(head.x===food.x && head.y===food.y){
+    score++;
+    document.getElementById('score').textContent = score;
+    placeFood();
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+function endGame(){
+  running = false;
+  clearInterval(loopId);
+  if(score > best){ best = score; localStorage.setItem('neonplay_snake_best', best); }
+  document.getElementById('best').textContent = best;
+  document.getElementById('finalScore').textContent = 'Ball: ' + score;
+  document.getElementById('overOverlay').classList.add('show');
+}
+
+function startGame(){
+  resetGame();
+  draw();
+  running = true;
+  document.getElementById('startOverlay').classList.remove('show');
+  document.getElementById('overOverlay').classList.remove('show');
+  clearInterval(loopId);
+  loopId = setInterval(tick, 110);
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+
+function setDir(x,y){
+  if(dir.x === -x && dir.y === -y) return; // no 180 turn
+  nextDir = {x,y};
+}
+
+window.addEventListener('keydown', e=>{
+  const map = { ArrowUp:[0,-1], ArrowDown:[0,1], ArrowLeft:[-1,0], ArrowRight:[1,0], w:[0,-1], s:[0,1], a:[-1,0], d:[1,0] };
+  if(map[e.key]){ e.preventDefault(); setDir(...map[e.key]); }
+});
+
+document.querySelectorAll('.touch-controls button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const map = { up:[0,-1], down:[0,1], left:[-1,0], right:[1,0] };
+    setDir(...map[btn.dataset.dir]);
+  });
+});
+
+// swipe support
+let touchStartX=0, touchStartY=0;
+canvas.addEventListener('touchstart', e=>{ touchStartX=e.touches[0].clientX; touchStartY=e.touches[0].clientY; });
+canvas.addEventListener('touchend', e=>{
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if(Math.abs(dx) > Math.abs(dy)){ setDir(dx>0?1:-1, 0); } else { setDir(0, dy>0?1:-1); }
+});
+
+resetGame();
+draw();
+</script>
+</body>
+</html>

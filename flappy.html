@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Uchuvchi Qush — NEONPLAY</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Press+Start+2P&display=swap');
+  :root{ --bg:#0E0B1E; --surface:#17132B; --border:#2B2450; --lime:#C4F135; --pink:#FF3D81; --violet:#7C3AED; --text:#F5F3FF; --muted:#A79DC7; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; overflow:hidden; }
+  .game-wrap{ position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; padding:12px; }
+  .hud{ font-family:'Press Start 2P',monospace; font-size:13px; color:var(--lime); }
+  canvas{ background:linear-gradient(180deg,#1a1436,#0E0B1E); border:2px solid var(--border); border-radius:14px; box-shadow:0 20px 50px rgba(124,58,237,.25); max-width:94vw; max-height:60vh; touch-action:none; }
+  .hint{ color:var(--muted); font-size:13px; text-align:center; max-width:300px; }
+  .overlay{ position:absolute; inset:0; background:rgba(6,4,16,.85); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; text-align:center; }
+  .overlay.hide{ display:none; }
+  .btn{ background:linear-gradient(120deg,var(--violet),#9F5CF0); color:#fff; border:none; padding:12px 28px; border-radius:999px; font-weight:700; font-size:14px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="game-wrap">
+  <div class="hud">SCORE: <span id="score">0</span> &nbsp; BEST: <span id="best">0</span></div>
+  <canvas id="c" width="320" height="420"></canvas>
+  <p class="hint">Bosing / Bo'shliq tugmasini bosing — qush sakraydi. Trubalarga urilmang!</p>
+  <div class="overlay" id="startOverlay">
+    <h2>🐦 Uchuvchi Qush</h2>
+    <button class="btn" id="startBtn">Boshlash</button>
+  </div>
+  <div class="overlay hide" id="overOverlay">
+    <h2>Yiqildingiz!</h2>
+    <p class="hint" id="finalScore"></p>
+    <button class="btn" id="restartBtn">Qayta o'ynash</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+let bird, pipes, score, best = +localStorage.getItem('neonplay_flappy_best') || 0, running = false, frame = 0, raf;
+document.getElementById('best').textContent = best;
+
+const gravity = 0.45, flapPower = -7.6, pipeGap = 130, pipeWidth = 56, pipeSpeed = 2.4;
+
+function reset(){
+  bird = { x: 70, y: H/2, vy: 0, r: 14 };
+  pipes = [];
+  score = 0; frame = 0;
+  document.getElementById('score').textContent = 0;
+  spawnPipe();
+}
+
+function spawnPipe(){
+  const topH = 50 + Math.random() * (H - pipeGap - 160);
+  pipes.push({ x: W, top: topH, passed:false });
+}
+
+function flap(){
+  if(!running) return;
+  bird.vy = flapPower;
+}
+
+function update(){
+  frame++;
+  bird.vy += gravity;
+  bird.y += bird.vy;
+
+  if(frame % 90 === 0) spawnPipe();
+  pipes.forEach(p => p.x -= pipeSpeed);
+  pipes = pipes.filter(p => p.x > -pipeWidth);
+
+  pipes.forEach(p => {
+    if(!p.passed && p.x + pipeWidth < bird.x){
+      p.passed = true;
+      score++;
+      document.getElementById('score').textContent = score;
+    }
+    const withinX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + pipeWidth;
+    const hitTop = bird.y - bird.r < p.top;
+    const hitBottom = bird.y + bird.r > p.top + pipeGap;
+    if(withinX && (hitTop || hitBottom)) endGame();
+  });
+
+  if(bird.y + bird.r > H || bird.y - bird.r < 0) endGame();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#1a1436'); grad.addColorStop(1,'#0E0B1E');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0,0,W,H);
+
+  // pipes
+  pipes.forEach(p => {
+    ctx.fillStyle = '#22C55E';
+    ctx.fillRect(p.x, 0, pipeWidth, p.top);
+    ctx.fillRect(p.x, p.top + pipeGap, pipeWidth, H - p.top - pipeGap);
+    ctx.fillStyle = '#16A34A';
+    ctx.fillRect(p.x-3, p.top-14, pipeWidth+6, 14);
+    ctx.fillRect(p.x-3, p.top+pipeGap, pipeWidth+6, 14);
+  });
+
+  // bird
+  ctx.save();
+  ctx.translate(bird.x, bird.y);
+  ctx.rotate(Math.max(-0.4, Math.min(0.9, bird.vy/12)));
+  ctx.fillStyle = '#FDE047';
+  ctx.beginPath(); ctx.arc(0,0,bird.r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#F97316';
+  ctx.beginPath(); ctx.moveTo(bird.r-2,-2); ctx.lineTo(bird.r+10,2); ctx.lineTo(bird.r-2,6); ctx.fill();
+  ctx.fillStyle = '#0E0B1E';
+  ctx.beginPath(); ctx.arc(5,-5,2.4,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function loop(){
+  if(!running) return;
+  update();
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+function endGame(){
+  running = false;
+  cancelAnimationFrame(raf);
+  if(score > best){ best = score; localStorage.setItem('neonplay_flappy_best', best); }
+  document.getElementById('best').textContent = best;
+  document.getElementById('finalScore').textContent = 'Ball: ' + score;
+  document.getElementById('overOverlay').classList.remove('hide');
+}
+
+function startGame(){
+  reset();
+  draw();
+  running = true;
+  document.getElementById('startOverlay').classList.add('hide');
+  document.getElementById('overOverlay').classList.add('hide');
+  loop();
+}
+
+document.getElementById('startBtn').addEventListener('click', startGame);
+document.getElementById('restartBtn').addEventListener('click', startGame);
+canvas.addEventListener('mousedown', flap);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); flap(); });
+window.addEventListener('keydown', e => { if(e.code === 'Space'){ e.preventDefault(); flap(); } });
+
+reset();
+draw();
+</script>
+</body>
+</html>
